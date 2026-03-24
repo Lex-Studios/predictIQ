@@ -125,6 +125,48 @@ fn test_place_bet_after_deadline() {
     assert_eq!(result, Err(Ok(ErrorCode::MarketClosed)));
 }
 
+// fix/issue-60: Verify the hard stop on betting at the resolution deadline.
+// Even if the market status is still Active (attempt_oracle_resolution hasn't been called yet),
+// a bet placed at resolution_deadline + 1 must be rejected. This closes the race window where
+// an oracle result is known off-chain but the on-chain status hasn't been updated, preventing
+// informed bettors from exploiting information asymmetry.
+#[test]
+fn test_place_bet_rejected_one_second_after_resolution_deadline_while_still_active() {
+    let (env, client, _admin, user, token) = setup_test_with_token();
+
+    // Market created at t=500; deadline = 500+1000 = 1500, resolution_deadline = 500+2000 = 2500
+    env.ledger().with_mut(|li| li.timestamp = 500);
+    let market_id = create_simple_market(&client, &env, &user, &token);
+
+    // Confirm market is still Active (attempt_oracle_resolution has NOT been called)
+    let market = client.get_market(&market_id).unwrap();
+    assert_eq!(market.status, crate::types::MarketStatus::Active);
+
+    // Advance to exactly resolution_deadline + 1 (2501)
+    // The oracle result may already be known off-chain at this point
+    env.ledger().with_mut(|li| li.timestamp = 2501);
+
+    // Bet must be rejected with ResolutionDeadlinePassed, not succeed due to Active status
+    let result = client.try_place_bet(&user, &market_id, &0, &1000, &token, &None);
+    assert_eq!(result, Err(Ok(ErrorCode::ResolutionDeadlinePassed)));
+}
+
+#[test]
+fn test_place_bet_allowed_one_second_before_resolution_deadline() {
+    let (env, client, _admin, user, token) = setup_test_with_token();
+
+    // Market created at t=500; deadline = 1500, resolution_deadline = 2500
+    env.ledger().with_mut(|li| li.timestamp = 500);
+    let market_id = create_simple_market(&client, &env, &user, &token);
+
+    // Advance to one second before resolution_deadline (2499) — still within betting window
+    env.ledger().with_mut(|li| li.timestamp = 2499);
+
+    // Bet should be accepted (not blocked by resolution deadline guard)
+    let result = client.try_place_bet(&user, &market_id, &0, &1000, &token, &None);
+    assert_ne!(result, Err(Ok(ErrorCode::ResolutionDeadlinePassed)));
+}
+
 #[test]
 fn test_place_bet_on_resolved_market() {
     let (env, client, _admin, user, token) = setup_test_with_token();

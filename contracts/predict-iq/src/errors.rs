@@ -39,4 +39,8 @@ pub enum ErrorCode {
     UpgradeFailed = 132,
     ParentMarketNotResolved = 133,
     ParentMarketInvalidOutcome = 134,
+    // Betting is hard-locked once the resolution window begins, regardless of market status.
+    // This prevents information-asymmetry exploitation when an oracle result is known off-chain
+    // but attempt_oracle_resolution hasn't been called yet.
+    ResolutionDeadlinePassed = 135,
 }

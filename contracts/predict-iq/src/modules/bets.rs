@@ -52,6 +52,14 @@ pub fn place_bet(
         return Err(ErrorCode::DeadlinePassed);
     }
 
+    // Hard-stop: once the resolution window begins, betting is locked regardless of market
+    // status. This closes the race window where an oracle result is known off-chain but
+    // `attempt_oracle_resolution` hasn't been called yet, preventing informed bettors from
+    // exploiting information asymmetry against uninformed participants.
+    if e.ledger().timestamp() >= market.resolution_deadline {
+        return Err(ErrorCode::ResolutionDeadlinePassed);
+    }
+
     if outcome >= market.options.len() {
         return Err(ErrorCode::InvalidOutcome);
     }
