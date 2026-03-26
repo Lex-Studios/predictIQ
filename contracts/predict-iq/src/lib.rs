@@ -224,7 +224,6 @@ impl PredictIQ {
         crate::modules::markets::release_creation_deposit(&e, market_id, native_token)
     }
 
-    // Governance and Upgrade Functions
     pub fn initialize_guardians(
         e: Env,
         guardians: Vec<crate::types::Guardian>,
@@ -269,17 +268,14 @@ impl PredictIQ {
         crate::modules::governance::is_timelock_satisfied(&e)
     }
 
-    /// Prune (archive) a resolved market after 30 days grace period
     pub fn prune_market(e: Env, market_id: u64) -> Result<(), ErrorCode> {
         crate::modules::markets::prune_market(&e, market_id)
     }
 
-    /// Get the minimum bet amount threshold
     pub fn get_minimum_bet_amount(e: Env) -> i128 {
         crate::modules::bets::get_minimum_bet_amount(&e)
     }
 
-    /// Set the minimum bet amount threshold (admin only)
     pub fn set_minimum_bet_amount(e: Env, amount: i128) -> Result<(), ErrorCode> {
         crate::modules::bets::set_minimum_bet_amount(&e, amount)
     }
