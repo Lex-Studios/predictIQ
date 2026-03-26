@@ -192,17 +192,20 @@ pub fn emit_fee_collected(e: &Env, _market_id: u64, contract_address: Address, a
         .publish((symbol_short!("fee_colct"), 0u64, contract_address), amount);
 }
 
-/// Emit MonitoringStateReset event
-/// Topics: [mon_reset, 0 (no market), resetter]
-/// Data: (previous_error_count, previous_last_observation)
-pub fn emit_monitoring_state_reset(
+/// Issue #63: Emit AdminFallbackResolution event
+/// Emitted when an admin resolves a market that reached a voting deadlock
+/// (no 60% majority after the full voting period).
+///
+/// Topics: [adm_fallbk, market_id, admin]
+/// Data: (winning_outcome)
+pub fn emit_admin_fallback_resolution(
     e: &Env,
-    resetter: Address,
-    previous_error_count: u32,
-    previous_last_observation: u64,
+    market_id: u64,
+    admin: Address,
+    winning_outcome: u32,
 ) {
     e.events().publish(
-        (symbol_short!("mon_reset"), 0u64, resetter),
-        (previous_error_count, previous_last_observation),
+        (symbol_short!("adm_fallbk"), market_id, admin),
+        winning_outcome,
     );
 }
