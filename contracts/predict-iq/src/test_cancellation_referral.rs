@@ -168,19 +168,21 @@ fn test_bettor_receives_full_refund_on_cancelled_referred_market() {
     let bet_amount = 5_000i128;
     let bettor = ctx.mint_and_bet(market_id, 0, bet_amount, Some(&referrer));
 
-    let balance_before = ctx.token_balance(&bettor);
+    // Record balance after bet (tokens were transferred to contract).
+    let balance_after_bet = ctx.token_balance(&bettor);
 
     ctx.client.cancel_market_admin(&market_id);
     let refund = ctx.client.withdraw_refund(&bettor, &market_id);
 
+    // Refund must equal the full original bet amount (net + fee reversed).
     assert_eq!(
         refund, bet_amount,
-        "bettor must receive 100% of original stake back"
+        "bettor must receive 100% of original stake back (net + fee)"
     );
     assert_eq!(
         ctx.token_balance(&bettor),
-        balance_before + bet_amount,
-        "bettor token balance must increase by the full bet amount"
+        balance_after_bet + bet_amount,
+        "bettor token balance must be restored to pre-bet level"
     );
 }
 
@@ -293,8 +295,8 @@ fn test_mixed_referred_and_non_referred_bets_all_consistent_after_cancellation()
     let referred_bettor = ctx.mint_and_bet(market_id, 0, referred_amount, Some(&referrer));
     let plain_bettor = ctx.mint_and_bet(market_id, 1, plain_amount, None);
 
-    let referred_balance_before = ctx.token_balance(&referred_bettor);
-    let plain_balance_before = ctx.token_balance(&plain_bettor);
+    let referred_balance_after_bet = ctx.token_balance(&referred_bettor);
+    let plain_balance_after_bet = ctx.token_balance(&plain_bettor);
 
     ctx.client.cancel_market_admin(&market_id);
 
@@ -305,19 +307,19 @@ fn test_mixed_referred_and_non_referred_bets_all_consistent_after_cancellation()
         "referrer balance must be zero after cancellation"
     );
 
-    // Both bettors get full refunds
+    // Both bettors get full refunds (gross = net + fee)
     let refund_referred = ctx.client.withdraw_refund(&referred_bettor, &market_id);
     let refund_plain = ctx.client.withdraw_refund(&plain_bettor, &market_id);
 
-    assert_eq!(refund_referred, referred_amount);
-    assert_eq!(refund_plain, plain_amount);
+    assert_eq!(refund_referred, referred_amount, "referred bettor must get full gross refund");
+    assert_eq!(refund_plain, plain_amount, "plain bettor must get full gross refund");
 
     assert_eq!(
         ctx.token_balance(&referred_bettor),
-        referred_balance_before + referred_amount
+        referred_balance_after_bet + referred_amount
     );
     assert_eq!(
         ctx.token_balance(&plain_bettor),
-        plain_balance_before + plain_amount
+        plain_balance_after_bet + plain_amount
     );
 }
