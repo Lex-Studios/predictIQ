@@ -393,7 +393,7 @@ pub fn emergency_pause(e: &Env, voter: Address) -> Result<(), ErrorCode> {
     }
 
     // Trigger emergency pause
-    e.storage().persistent().set(
+    e.storage().instance().set(
         &ConfigKey::CircuitBreakerState,
         &crate::types::CircuitBreakerState::Paused,
     );
