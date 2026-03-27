@@ -122,6 +122,7 @@ pub fn place_bet(
 
     let outcome_stake = markets::get_outcome_stake(e, market_id, outcome);
     markets::set_outcome_stake(e, market_id, outcome, outcome_stake + amount);
+    markets::increment_outcome_bet_count(e, market_id, outcome);
 
     // Issue #24: Maintain actual winner count per outcome
     let is_new_bettor = existing_bet.amount == amount; // first bet on this outcome

@@ -105,9 +105,10 @@ pub fn create_market(
 
     let num_outcomes = options.len() as u32;
 
-    // Pre-initialize outcome_stakes map with 0 for all outcomes to optimize gas
+    // Pre-initialize outcome_stakes and bet counts with 0 for all outcomes to optimize gas
     for i in 0..num_outcomes {
         set_outcome_stake(e, count, i, 0);
+        set_outcome_bet_count(e, count, i, 0);
     }
 
     let market = Market {
@@ -333,11 +334,14 @@ pub fn prune_market(e: &Env, market_id: u64) -> Result<(), ErrorCode> {
 
     e.storage().persistent().remove(&DataKey::Market(market_id));
 
-    // Remove outcome stakes
+    // Remove outcome stakes and bet counts
     for i in 0..market.options.len() as u32 {
         e.storage()
             .persistent()
             .remove(&DataKey::OutcomeStake(market_id, i));
+        e.storage()
+            .persistent()
+            .remove(&DataKey::OutcomeBetCount(market_id, i));
     }
 
     // Record market ID in event archive for indexers

@@ -128,7 +128,7 @@ impl PredictIQ {
         outcome: u32,
         token_address: Address,
     ) -> Result<i128, ErrorCode> {
-        crate::modules::bets::withdraw_refund(&e, bettor, market_id, token_address)
+        crate::modules::bets::withdraw_refund(&e, bettor, market_id, outcome, token_address)
     }
 
     pub fn get_market(e: Env, id: u64) -> Option<crate::types::Market> {
@@ -377,5 +377,10 @@ impl PredictIQ {
     /// Emergency pause triggered by 2/3 Guardian majority (community panic override)
     pub fn emergency_pause(e: Env, voter: Address) -> Result<(), ErrorCode> {
         crate::modules::governance::emergency_pause(&e, voter)
+    }
+
+    /// Get the accurate bet count for a specific outcome (analytics)
+    pub fn count_bets_for_outcome(e: Env, market_id: u64, outcome: u32) -> u32 {
+        crate::modules::markets::count_bets_for_outcome(&e, market_id, outcome)
     }
 }
