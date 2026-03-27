@@ -40,7 +40,7 @@ pub fn detect_clawback(
     let actual_balance = client.balance(&e.current_contract_address());
 
     if actual_balance < expected_balance {
-        return Err(ErrorCode::InsufficientBalance);
+        return Err(ErrorCode::AssetClawedBack);
     }
 
     Ok(())
