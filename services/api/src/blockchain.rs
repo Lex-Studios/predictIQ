@@ -1,6 +1,8 @@
 use std::{
-    collections::HashSet,
-    sync::Arc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -36,6 +38,7 @@ pub struct BlockchainClient {
 #[derive(Default)]
 struct MonitoringState {
     watched_txs: RwLock<HashSet<String>>,
+    tasks_started: AtomicBool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -720,6 +723,11 @@ impl BlockchainClient {
     }
 
     pub fn start_background_tasks(self: Arc<Self>) {
+        if self.monitor.tasks_started.swap(true, Ordering::SeqCst) {
+            tracing::warn!("background tasks already started; skipping duplicate invocation");
+            return;
+        }
+
         let sync_client = self.clone();
         tokio::spawn(async move {
             sync_client.run_sync_worker().await;
@@ -885,5 +893,24 @@ mod tests {
         assert_eq!(*cache.ledger.lock().await, Some(110));
         assert_eq!(*cache.purged_count.lock().await, 0);
         assert_eq!(*metrics.invalidation_count.lock().unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_start_background_tasks_idempotency() {
+        let config = Config::from_env();
+        let metrics = Metrics::new().unwrap();
+        let cache = RedisCache::new("redis://127.0.0.1").await.unwrap();
+        let client = Arc::new(BlockchainClient::new(&config, cache, metrics).unwrap());
+
+        // Initial state: not started
+        assert!(!client.monitor.tasks_started.load(Ordering::SeqCst));
+
+        // First call
+        client.clone().start_background_tasks();
+        assert!(client.monitor.tasks_started.load(Ordering::SeqCst));
+
+        // Second call should not panic or change state (stays true)
+        client.clone().start_background_tasks();
+        assert!(client.monitor.tasks_started.load(Ordering::SeqCst));
     }
 }
