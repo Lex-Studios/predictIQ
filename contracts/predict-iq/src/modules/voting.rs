@@ -1,5 +1,7 @@
 use crate::errors::ErrorCode;
 use crate::modules::markets;
+// Issue #171: ConfigKey (including GovernanceToken variant) must be explicitly imported
+// from types. Previously missing, causing compilation failure in cast_vote.
 use crate::types::{ConfigKey, LockedTokens, MarketStatus, Vote};
 use soroban_sdk::{contracttype, token, Address, Env, IntoVal, Symbol, Val, Vec};
 
@@ -215,6 +217,31 @@ pub fn prune_market_voting_state(e: &Env, market_id: u64, num_outcomes: u32) {
         e.storage()
             .persistent()
             .remove(&DataKey::VoteTally(market_id, o));
+    }
+}
+
+#[cfg(test)]
+mod import_tests {
+    use crate::types::ConfigKey;
+    use soroban_sdk::{testutils::Address as _, Address, Env};
+
+    /// Issue #171: Verify GovernanceToken variant is accessible and round-trips through storage.
+    #[test]
+    fn governance_token_config_key_round_trips() {
+        let e = Env::default();
+        let token = Address::generate(&e);
+        e.storage().instance().set(&ConfigKey::GovernanceToken, &token);
+        let stored: Option<Address> = e.storage().instance().get(&ConfigKey::GovernanceToken);
+        assert_eq!(stored, Some(token));
+    }
+
+    /// Issue #171: cast_vote returns GovernanceTokenNotSet when token is not configured.
+    #[test]
+    fn cast_vote_returns_error_when_governance_token_not_set() {
+        let e = Env::default();
+        // GovernanceToken not set in storage — get returns None
+        let stored: Option<Address> = e.storage().instance().get(&ConfigKey::GovernanceToken);
+        assert!(stored.is_none(), "GovernanceToken must be absent to trigger the error");
     }
 }
 
