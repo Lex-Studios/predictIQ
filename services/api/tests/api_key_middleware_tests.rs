@@ -39,12 +39,20 @@ mod tests {
     #[tokio::test]
     async fn missing_header_returns_401() {
         let resp = app()
-            .oneshot(Request::builder().uri("/protected").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/protected")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
 
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
-        assert!(resp.headers()["content-type"].to_str().unwrap().contains("application/json"));
+        assert!(resp.headers()["content-type"]
+            .to_str()
+            .unwrap()
+            .contains("application/json"));
         assert!(resp.headers().contains_key("www-authenticate"));
         let body = body_json(resp).await;
         assert!(body.get("error").is_some());

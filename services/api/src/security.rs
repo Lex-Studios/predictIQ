@@ -261,6 +261,11 @@ impl ApiKeyAuth {
     }
 }
 
+#[derive(Serialize)]
+struct ApiKeyErrorBody {
+    error: &'static str,
+}
+
 /// API key authentication middleware
 pub async fn api_key_middleware(
     State(auth): State<Arc<ApiKeyAuth>>,
@@ -274,13 +279,11 @@ pub async fn api_key_middleware(
         .unwrap_or("");
 
     if !auth.verify(api_key) {
-        #[derive(Serialize)]
-        struct ErrorBody {
-            error: &'static str,
-        }
         let mut resp = (
             StatusCode::UNAUTHORIZED,
-            Json(ErrorBody { error: "invalid or missing API key" }),
+            Json(ApiKeyErrorBody {
+                error: "invalid or missing API key",
+            }),
         )
             .into_response();
         resp.headers_mut().insert(
