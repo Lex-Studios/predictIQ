@@ -8,6 +8,9 @@ mod metrics;
 mod newsletter;
 mod rate_limit;
 pub mod security;
+
+#[cfg(test)]
+mod api_key_auth_tests;
 mod validation;
 
 use std::sync::Arc;
