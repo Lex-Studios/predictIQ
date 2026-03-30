@@ -33,7 +33,7 @@ use security::{ApiKeyAuth, IpWhitelist, RateLimiter};
 use shutdown::ShutdownCoordinator;
 use tokio::net::TcpListener;
 use tower_http::{
-    cors::{Any, CorsLayer},
+    cors::{CorsLayer, Origin, Any},
     trace::TraceLayer,
 };
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -149,10 +149,43 @@ pub async fn run() -> anyhow::Result<()> {
         tracing::warn!("cache warming skipped: {err}");
     }
 
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+    let cors = {
+        let origins = &state.config.cors_allowed_origins;
+        let methods = &state.config.cors_allowed_methods;
+        let headers = &state.config.cors_allowed_headers;
+        let allow_credentials = state.config.cors_allow_credentials;
+
+        let mut cors = CorsLayer::new();
+
+        // Allowed origins
+        if origins.len() == 1 && origins[0] == "*" {
+            cors = cors.allow_origin(Any);
+        } else {
+            let origins_vec: Vec<Origin> = origins.iter().filter_map(|o| Origin::try_from(o.as_str()).ok()).collect();
+            cors = cors.allow_origin(origins_vec);
+        }
+
+        // Allowed methods
+        if methods.len() == 1 && methods[0] == "*" {
+            cors = cors.allow_methods(Any);
+        } else {
+            cors = cors.allow_methods(methods.clone());
+        }
+
+        // Allowed headers
+        if headers.len() == 1 && headers[0] == "*" {
+            cors = cors.allow_headers(Any);
+        } else {
+            cors = cors.allow_headers(headers.clone());
+        }
+
+        // Allow credentials
+        if allow_credentials {
+            cors = cors.allow_credentials(true);
+        }
+
+        cors
+    };
 
     let public_routes = Router::new()
         .route("/health", get(handlers::health))

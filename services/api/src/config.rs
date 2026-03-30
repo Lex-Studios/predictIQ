@@ -63,6 +63,11 @@ pub struct Config {
     pub admin_whitelist_ips: Vec<IpAddr>,
     pub request_signing_secret: Option<String>,
     pub sendgrid_webhook_secret: Option<String>,
+    // CORS config
+    pub cors_allowed_origins: Vec<String>,
+    pub cors_allowed_methods: Vec<String>,
+    pub cors_allowed_headers: Vec<String>,
+    pub cors_allow_credentials: bool,
 }
 
 impl Config {
@@ -126,6 +131,22 @@ impl Config {
             .and_then(|s| s.parse::<u64>().ok())
             .filter(|&s| s > 0)
             .map(Duration::from_secs);
+
+        let cors_allowed_origins = env::var("CORS_ALLOWED_ORIGINS")
+            .map(|v| v.split(',').map(|s| s.trim().to_string()).collect())
+            .unwrap_or_else(|_| vec!["https://yourdomain.com".to_string()]);
+
+        let cors_allowed_methods = env::var("CORS_ALLOWED_METHODS")
+            .map(|v| v.split(',').map(|s| s.trim().to_string()).collect())
+            .unwrap_or_else(|_| vec!["GET".to_string(), "POST".to_string(), "OPTIONS".to_string()]);
+
+        let cors_allowed_headers = env::var("CORS_ALLOWED_HEADERS")
+            .map(|v| v.split(',').map(|s| s.trim().to_string()).collect())
+            .unwrap_or_else(|_| vec!["Content-Type".to_string(), "Authorization".to_string()]);
+
+        let cors_allow_credentials = env::var("CORS_ALLOW_CREDENTIALS")
+            .map(|v| v == "true" || v == "1")
+            .unwrap_or(false);
 
         Self {
             bind_addr,
@@ -194,6 +215,10 @@ impl Config {
                 .unwrap_or_default(),
             request_signing_secret: env::var("REQUEST_SIGNING_SECRET").ok(),
             sendgrid_webhook_secret: env::var("SENDGRID_WEBHOOK_SECRET").ok(),
+            cors_allowed_origins,
+            cors_allowed_methods,
+            cors_allowed_headers,
+            cors_allow_credentials,
         }
     }
 
