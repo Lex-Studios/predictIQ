@@ -25,11 +25,26 @@ impl FromStr for BlockchainNetwork {
     }
 }
 
+/// PostgreSQL connection pool settings for the API (`sqlx::PgPool`).
+///
+/// Environment variables are documented in `services/api/DATABASE.md`.
+#[derive(Clone, Debug)]
+pub struct DbPoolConfig {
+    pub min_connections: u32,
+    pub max_connections: u32,
+    pub acquire_timeout: Duration,
+    /// When `None`, sqlx uses its default for idle reaping.
+    pub idle_timeout: Option<Duration>,
+    /// When `None`, sqlx uses its default connection lifetime.
+    pub max_lifetime: Option<Duration>,
+}
+
 #[derive(Clone, Debug)]
 pub struct Config {
     pub bind_addr: SocketAddr,
     pub redis_url: String,
     pub database_url: String,
+    pub db_pool: DbPoolConfig,
     pub blockchain_rpc_url: String,
     pub blockchain_network: BlockchainNetwork,
     pub contract_id: String,
@@ -80,12 +95,51 @@ impl Config {
             })
             .unwrap_or_default();
 
+        let mut db_pool_min = env::var("DB_POOL_MIN_CONNECTIONS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(5u32);
+        let mut db_pool_max = env::var("DB_POOL_MAX_CONNECTIONS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(25u32);
+        if db_pool_min > db_pool_max {
+            std::mem::swap(&mut db_pool_min, &mut db_pool_max);
+        }
+        // sqlx requires at least one connection in the pool.
+        let db_pool_max = db_pool_max.max(1);
+
+        let db_pool_acquire_secs: u64 = env::var("DB_POOL_ACQUIRE_TIMEOUT_SECS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(5);
+        let db_pool_acquire_timeout = Duration::from_secs(db_pool_acquire_secs.max(1));
+
+        let db_pool_idle_timeout = env::var("DB_POOL_IDLE_TIMEOUT_SECS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .filter(|&s| s > 0)
+            .map(Duration::from_secs);
+
+        let db_pool_max_lifetime = env::var("DB_POOL_MAX_LIFETIME_SECS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .filter(|&s| s > 0)
+            .map(Duration::from_secs);
+
         Self {
             bind_addr,
             redis_url: env::var("REDIS_URL")
                 .unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string()),
             database_url: env::var("DATABASE_URL")
                 .unwrap_or_else(|_| "postgres://postgres:postgres@127.0.0.1/predictiq".to_string()),
+            db_pool: DbPoolConfig {
+                min_connections: db_pool_min,
+                max_connections: db_pool_max,
+                acquire_timeout: db_pool_acquire_timeout,
+                idle_timeout: db_pool_idle_timeout,
+                max_lifetime: db_pool_max_lifetime,
+            },
             blockchain_rpc_url,
             blockchain_network,
             contract_id: env::var("PREDICTIQ_CONTRACT_ID")

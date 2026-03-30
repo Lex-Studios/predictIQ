@@ -62,7 +62,13 @@ pub async fn run() -> anyhow::Result<()> {
     let config = Config::from_env();
     let metrics = Metrics::new()?;
     let cache = RedisCache::new(&config.redis_url).await?;
-    let db = Database::new(&config.database_url, cache.clone(), metrics.clone()).await?;
+    let db = Database::new(
+        &config.database_url,
+        &config.db_pool,
+        cache.clone(),
+        metrics.clone(),
+    )
+    .await?;
     let blockchain = BlockchainClient::new(&config, cache.clone(), metrics.clone())?;
 
     let email_service = EmailService::new(config.clone())?;

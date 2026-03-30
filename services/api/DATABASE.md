@@ -2,6 +2,20 @@
 
 The PredictIQ API service uses PostgreSQL. All schema changes are managed through ordered SQL migration files.
 
+## API server connection pool
+
+The API builds a [`sqlx`](https://docs.rs/sqlx) PostgreSQL pool at startup. Pool sizing and timeouts can be tuned with environment variables (defaults match the previous hard-coded values).
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DB_POOL_MIN_CONNECTIONS` | `5` | Minimum idle connections kept open. |
+| `DB_POOL_MAX_CONNECTIONS` | `25` | Upper bound on concurrent connections. If `min` and `max` are reversed, they are swapped; `max` is clamped to at least `1`. |
+| `DB_POOL_ACQUIRE_TIMEOUT_SECS` | `5` | Max time to wait for a connection from the pool (seconds). Clamped to at least `1`. |
+| `DB_POOL_IDLE_TIMEOUT_SECS` | *(unset)* | If set to a positive integer, idle connections older than this are closed (seconds). When unset, sqlx’s default applies. `0` is ignored (same as unset). |
+| `DB_POOL_MAX_LIFETIME_SECS` | *(unset)* | If set to a positive integer, connections are recycled after this lifetime (seconds). When unset, sqlx’s default applies. `0` is ignored (same as unset). |
+
+`DATABASE_URL` is still required for the connection string (see default in `config.rs` for local development).
+
 ## Running Migrations
 
 From the workspace root:

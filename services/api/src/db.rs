@@ -7,6 +7,7 @@ use sqlx::{postgres::PgPoolOptions, PgPool, Row};
 
 use crate::{
     cache::{keys, RedisCache},
+    config::DbPoolConfig,
     metrics::Metrics,
 };
 
@@ -63,13 +64,21 @@ pub struct NewsletterSubscriber {
 impl Database {
     pub async fn new(
         database_url: &str,
+        pool_config: &DbPoolConfig,
         cache: RedisCache,
         metrics: Metrics,
     ) -> anyhow::Result<Self> {
-        let pool = PgPoolOptions::new()
-            .max_connections(25)
-            .min_connections(5)
-            .acquire_timeout(Duration::from_secs(5))
+        let mut opts = PgPoolOptions::new()
+            .min_connections(pool_config.min_connections)
+            .max_connections(pool_config.max_connections)
+            .acquire_timeout(pool_config.acquire_timeout);
+        if let Some(d) = pool_config.idle_timeout {
+            opts = opts.idle_timeout(d);
+        }
+        if let Some(d) = pool_config.max_lifetime {
+            opts = opts.max_lifetime(d);
+        }
+        let pool = opts
             .connect(database_url)
             .await
             .context("failed to connect to postgres")?;
