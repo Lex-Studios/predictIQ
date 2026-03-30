@@ -4,6 +4,7 @@ use std::{
     str::FromStr,
     time::Duration,
 };
+use ipnet::IpNet;
 
 #[derive(Clone, Debug)]
 pub enum BlockchainNetwork {
@@ -61,9 +62,10 @@ pub struct Config {
     pub base_url: String,
     pub api_keys: Vec<String>,
     pub admin_whitelist_ips: Vec<IpAddr>,
+    pub trust_proxy: bool,
     pub request_signing_secret: Option<String>,
     pub sendgrid_webhook_secret: Option<String>,
-    pub contract_key_schema: ContractKeySchema,
+    pub trusted_proxy_cidrs: Vec<IpNet>,
 }
 
 impl Config {
@@ -127,6 +129,10 @@ impl Config {
             .and_then(|s| s.parse::<u64>().ok())
             .filter(|&s| s > 0)
             .map(Duration::from_secs);
+
+        let trusted_proxy_cidrs = env::var("TRUSTED_PROXY_CIDRS")
+            .map(|v| v.split(',').filter_map(|s| s.trim().parse().ok()).collect())
+            .unwrap_or_else(|_| vec![]);
 
         Self {
             bind_addr,
@@ -193,9 +199,13 @@ impl Config {
                         .collect()
                 })
                 .unwrap_or_default(),
+            trust_proxy: env::var("TRUST_PROXY")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(true),
             request_signing_secret: env::var("REQUEST_SIGNING_SECRET").ok(),
             sendgrid_webhook_secret: env::var("SENDGRID_WEBHOOK_SECRET").ok(),
-            contract_key_schema: ContractKeySchema::from_env(),
+            trusted_proxy_cidrs,
         }
     }
 
