@@ -1,3 +1,10 @@
+# Next.js build output
+frontend/.next/
+
+# Dependencies
+node_modules/
+**/node_modules/
+
 /target
 **/*.rs.bk
 .env
