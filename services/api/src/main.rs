@@ -31,6 +31,12 @@ use tower_http::{
     trace::TraceLayer,
 };
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use opentelemetry::{global, trace::TracerProvider as _, KeyValue};
+use opentelemetry_sdk::{
+    trace::{RandomIdGenerator, Sampler, TracerProvider},
+    Resource,
+};
+use opentelemetry_otlp::WithExportConfig;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -47,11 +53,41 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // Initialize OpenTelemetry tracer
+    let otlp_endpoint = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT")
+        .unwrap_or_else(|_| "http://localhost:4317".to_string());
+    let service_name = std::env::var("OTEL_SERVICE_NAME")
+        .unwrap_or_else(|_| "predictiq-api".to_string());
+    let sampling_ratio = std::env::var("OTEL_TRACE_SAMPLING_RATIO")
+        .unwrap_or_else(|_| "1.0".to_string())
+        .parse::<f64>()
+        .unwrap_or(1.0);
+
+    let tracer = opentelemetry_otlp::new_pipeline()
+        .tracing()
+        .with_exporter(
+            opentelemetry_otlp::new_exporter()
+                .tonic()
+                .with_endpoint(otlp_endpoint),
+        )
+        .with_trace_config(
+            opentelemetry_sdk::trace::Config::default()
+                .with_sampler(Sampler::TraceIdRatioBased(sampling_ratio))
+                .with_id_generator(RandomIdGenerator::default())
+                .with_resource(Resource::new(vec![
+                    KeyValue::new("service.name", service_name),
+                    KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
+                ])),
+        )
+        .install_batch(opentelemetry_sdk::runtime::Tokio)?;
+
+    // Initialize tracing subscriber with OpenTelemetry layer
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
             std::env::var("RUST_LOG").unwrap_or_else(|_| "info".into()),
         ))
         .with(tracing_subscriber::fmt::layer())
+        .with(tracing_opentelemetry::layer().with_tracer(tracer.tracer("predictiq-api")))
         .init();
 
     let config = Config::from_env();
@@ -265,6 +301,9 @@ async fn main() -> anyhow::Result<()> {
                 .expect("failed to install CTRL+C handler");
             tracing::info!("Shutdown signal received");
             let _ = shutdown_tx.send(());
+            
+            // Shutdown OpenTelemetry to flush remaining spans
+            global::shutdown_tracer_provider();
         })
         .await?;
 
