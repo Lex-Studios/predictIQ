@@ -47,6 +47,12 @@ impl RedisCache {
         Ok(())
     }
 
+    pub async fn ping(&self) -> anyhow::Result<()> {
+        let mut conn = self.manager.clone();
+        let _: String = redis::cmd("PING").query_async(&mut conn).await?;
+        Ok(())
+    }
+
     pub async fn del_by_pattern(&self, pattern: &str) -> anyhow::Result<usize> {
         let mut conn = self.manager.clone();
         let mut cursor: u64 = 0;

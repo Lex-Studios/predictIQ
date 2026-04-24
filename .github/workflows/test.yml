@@ -86,6 +86,32 @@ jobs:
         run: cargo test --test '*' --workspace
         working-directory: contracts/predict-iq
 
+  api-rate-limit-tests:
+    name: API Rate Limiting Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-api-${{ hashFiles('services/api/Cargo.lock') }}
+
+      - name: Run rate limiting integration tests
+        run: cargo test --test rate_limiting_tests
+        working-directory: services/api
+
   gas-benchmarks:
     name: Gas Benchmarks
     runs-on: ubuntu-latest
@@ -467,6 +493,7 @@ jobs:
     needs:
       - unit-tests
       - integration-tests
+      - api-rate-limit-tests
       - gas-benchmarks
       - backend-coverage
       - security-audit
