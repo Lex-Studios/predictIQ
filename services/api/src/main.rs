@@ -10,6 +10,7 @@ mod metrics;
 mod newsletter;
 mod rate_limit;
 mod security;
+mod tracing_config;
 mod validation;
 
 use std::sync::Arc;
@@ -51,14 +52,16 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "info".into()),
-        ))
-        .with(tracing_subscriber::fmt::layer())
-        .init();
-
     let config = Config::from_env();
+    
+    // Initialize distributed tracing
+    tracing_config::init_tracing(
+        "predictiq-api",
+        env!("CARGO_PKG_VERSION"),
+        config.otlp_endpoint.clone(),
+        config.trace_sample_rate,
+    )?;
+
     let metrics = Metrics::new()?;
     let cache = RedisCache::new(&config.redis_url).await?;
     let db = Database::new(&config.database_url, cache.clone(), metrics.clone()).await?;
@@ -285,6 +288,7 @@ async fn main() -> anyhow::Result<()> {
                 .expect("failed to install CTRL+C handler");
             tracing::info!("Shutdown signal received");
             let _ = shutdown_tx.send(());
+            tracing_config::shutdown_tracing();
         })
         .await?;
 

@@ -75,6 +75,9 @@ pub struct Config {
     /// `metrics_public` is `true`).
     /// Configured via `METRICS_ALLOWLIST_IPS` (comma-separated).
     pub metrics_allowlist_ips: Vec<IpAddr>,
+    // Distributed tracing configuration
+    pub otlp_endpoint: Option<String>,
+    pub trace_sample_rate: f64,
 }
 
 impl Config {
@@ -227,6 +230,11 @@ impl Config {
                         .collect()
                 })
                 .unwrap_or_default(),
+            otlp_endpoint: env::var("OTLP_ENDPOINT").ok(),
+            trace_sample_rate: env::var("TRACE_SAMPLE_RATE")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0.1), // Default 10% sampling
         }
     }
 

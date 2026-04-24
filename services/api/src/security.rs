@@ -640,3 +640,33 @@ mod tests {
         assert_eq!(extract_client_ip(&headers, None, &[]), "2001:db8::1");
     }
 }
+
+/// Middleware to propagate trace context from incoming requests
+pub async fn trace_propagation_middleware(
+    headers: HeaderMap,
+    mut request: Request,
+    next: Next,
+) -> Response {
+    use opentelemetry::global;
+    use opentelemetry::propagation::TextMapPropagator;
+    use std::collections::HashMap;
+
+    // Extract trace context from headers
+    let propagator = global::get_text_map_propagator(|propagator| {
+        let mut carrier = HashMap::new();
+        for (key, value) in headers.iter() {
+            if let Ok(v) = value.to_str() {
+                carrier.insert(key.as_str().to_string(), v.to_string());
+            }
+        }
+        
+        let context = propagator.extract(&carrier);
+        context
+    });
+
+    // Attach context to current span
+    let span = tracing::Span::current();
+    span.set_parent(propagator);
+
+    next.run(request).await
+}

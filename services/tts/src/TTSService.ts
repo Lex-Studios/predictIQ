@@ -11,6 +11,7 @@ import path from "path";
 import { Readable } from "stream";
 import { pipeline } from "stream/promises";
 import { createWriteStream } from "fs";
+import { trace, context, SpanStatusCode, propagation } from "@opentelemetry/api";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -90,29 +91,44 @@ async function generateElevenLabs(
   voice: TTSVoice,
   config: NonNullable<TTSConfig["elevenlabs"]>
 ): Promise<Buffer> {
-  const modelId = config.modelId ?? "eleven_multilingual_v2";
-  const url = `https://api.elevenlabs.io/v1/text-to-speech/${voice.voiceId}`;
+  const tracer = trace.getTracer("tts-service");
+  return tracer.startActiveSpan("elevenlabs.generate", async (span) => {
+    try {
+      span.setAttribute("tts.provider", "elevenlabs");
+      span.setAttribute("tts.voice.id", voice.voiceId);
+      span.setAttribute("tts.text.length", text.length);
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "xi-api-key": config.apiKey,
-      "Content-Type": "application/json",
-      Accept: "audio/mpeg",
-    },
-    body: JSON.stringify({
-      text,
-      model_id: modelId,
-      voice_settings: { stability: 0.5, similarity_boost: 0.75 },
-    }),
+      const modelId = config.modelId ?? "eleven_multilingual_v2";
+      const url = `https://api.elevenlabs.io/v1/text-to-speech/${voice.voiceId}`;
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "xi-api-key": config.apiKey,
+          "Content-Type": "application/json",
+          Accept: "audio/mpeg",
+        },
+        body: JSON.stringify({
+          text,
+          model_id: modelId,
+          voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+        }),
+      });
+
+      if (!res.ok) {
+        const msg = await res.text().catch(() => res.statusText);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: msg });
+        throw new Error(`ElevenLabs error ${res.status}: ${msg}`);
+      }
+
+      const buffer = Buffer.from(await res.arrayBuffer());
+      span.setAttribute("tts.audio.size", buffer.length);
+      span.setStatus({ code: SpanStatusCode.OK });
+      return buffer;
+    } finally {
+      span.end();
+    }
   });
-
-  if (!res.ok) {
-    const msg = await res.text().catch(() => res.statusText);
-    throw new Error(`ElevenLabs error ${res.status}: ${msg}`);
-  }
-
-  return Buffer.from(await res.arrayBuffer());
 }
 
 async function generateGoogle(
@@ -120,24 +136,41 @@ async function generateGoogle(
   voice: TTSVoice,
   config: NonNullable<TTSConfig["google"]>
 ): Promise<Buffer> {
-  // Lazy-load @google-cloud/text-to-speech to keep it optional
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { TextToSpeechClient } = require("@google-cloud/text-to-speech") as {
-    TextToSpeechClient: new (opts: object) => {
-      synthesizeSpeech: (req: object) => Promise<[{ audioContent: Buffer | string }]>;
-    };
-  };
+  const tracer = trace.getTracer("tts-service");
+  return tracer.startActiveSpan("google.generate", async (span) => {
+    try {
+      span.setAttribute("tts.provider", "google");
+      span.setAttribute("tts.voice.id", voice.voiceId);
+      span.setAttribute("tts.text.length", text.length);
 
-  const client = new TextToSpeechClient(config);
+      // Lazy-load @google-cloud/text-to-speech to keep it optional
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { TextToSpeechClient } = require("@google-cloud/text-to-speech") as {
+        TextToSpeechClient: new (opts: object) => {
+          synthesizeSpeech: (req: object) => Promise<[{ audioContent: Buffer | string }]>;
+        };
+      };
 
-  const [response] = await client.synthesizeSpeech({
-    input: { text },
-    voice: { languageCode: voice.language, name: voice.voiceId },
-    audioConfig: { audioEncoding: "MP3" },
+      const client = new TextToSpeechClient(config);
+
+      const [response] = await client.synthesizeSpeech({
+        input: { text },
+        voice: { languageCode: voice.language, name: voice.voiceId },
+        audioConfig: { audioEncoding: "MP3" },
+      });
+
+      const audio = response.audioContent;
+      const buffer = Buffer.isBuffer(audio) ? audio : Buffer.from(audio as string, "base64");
+      span.setAttribute("tts.audio.size", buffer.length);
+      span.setStatus({ code: SpanStatusCode.OK });
+      return buffer;
+    } catch (error) {
+      span.setStatus({ code: SpanStatusCode.ERROR, message: String(error) });
+      throw error;
+    } finally {
+      span.end();
+    }
   });
-
-  const audio = response.audioContent;
-  return Buffer.isBuffer(audio) ? audio : Buffer.from(audio as string, "base64");
 }
 
 // ---------------------------------------------------------------------------
