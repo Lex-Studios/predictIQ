@@ -54,6 +54,68 @@ export interface TTSConfig {
   };
   /** Directory where audio files are stored */
   outputDir: string;
+  /** Authentication configuration — omit to disable auth */
+  auth?: AuthConfig;
+}
+
+// ---------------------------------------------------------------------------
+// Auth
+// ---------------------------------------------------------------------------
+
+/** API-key auth: caller passes one of the listed keys. */
+export interface ApiKeyAuthConfig {
+  type: "apikey";
+  keys: string[];
+}
+
+/** JWT auth: caller passes a Bearer token signed with this secret. */
+export interface JwtAuthConfig {
+  type: "jwt";
+  secret: string;
+}
+
+export type AuthConfig = ApiKeyAuthConfig | JwtAuthConfig;
+
+/** Thrown when authentication fails; maps to HTTP 401. */
+export class AuthError extends Error {
+  readonly statusCode = 401;
+  constructor(message = "Unauthorized") {
+    super(message);
+    this.name = "AuthError";
+  }
+}
+
+/**
+ * Validate a credential string against the configured auth strategy.
+ * - API key: `credential` must be one of the configured keys.
+ * - JWT: `credential` must be a valid HS256 token signed with the configured secret.
+ *
+ * Throws `AuthError` on failure; returns void on success.
+ */
+export function authenticate(credential: string | undefined, auth: AuthConfig): void {
+  if (!credential) throw new AuthError("Missing credential");
+
+  if (auth.type === "apikey") {
+    if (!auth.keys.includes(credential)) throw new AuthError("Invalid API key");
+    return;
+  }
+
+  // JWT — minimal HS256 verification without external deps
+  const parts = credential.split(".");
+  if (parts.length !== 3) throw new AuthError("Malformed JWT");
+
+  const [headerB64, payloadB64, sigB64] = parts;
+  const { createHmac } = require("crypto") as typeof import("crypto");
+  const expected = createHmac("sha256", auth.secret)
+    .update(`${headerB64}.${payloadB64}`)
+    .digest("base64url");
+
+  if (expected !== sigB64) throw new AuthError("Invalid JWT signature");
+
+  const payload = JSON.parse(Buffer.from(payloadB64, "base64url").toString());
+  if (payload.exp !== undefined && payload.exp < Math.floor(Date.now() / 1000)) {
+    throw new AuthError("JWT expired");
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -219,8 +281,10 @@ export class TTSService {
   /**
    * Enqueue a TTS job and return its ID immediately.
    * Processing happens asynchronously in the background.
+   * @param credential API key or JWT Bearer token (required when auth is configured).
    */
-  enqueue(text: string, voice: TTSVoice, provider?: TTSProvider): string {
+  enqueue(text: string, voice: TTSVoice, provider?: TTSProvider, credential?: string): string {
+    if (this.config.auth) authenticate(credential, this.config.auth);
     const id = makeId();
     const job: TTSJob = {
       id,
@@ -260,22 +324,26 @@ export class TTSService {
   /**
    * Synchronous generation — awaits completion and returns the output path.
    * Useful for low-latency pipelines where you can afford to wait.
+   * @param credential API key or JWT Bearer token (required when auth is configured).
    */
-  async generate(text: string, voice: TTSVoice, provider?: TTSProvider): Promise<string> {
-    const id = this.enqueue(text, voice, provider);
+  async generate(text: string, voice: TTSVoice, provider?: TTSProvider, credential?: string): Promise<string> {
+    const id = this.enqueue(text, voice, provider, credential);
     return this._waitForJob(id);
   }
 
   /**
    * Generate narrations for multiple segments and merge them into one file.
    * Returns the path to the merged audio file.
+   * @param credential API key or JWT Bearer token (required when auth is configured).
    */
   async generateAndMerge(
     segments: Array<{ text: string; voice: TTSVoice; provider?: TTSProvider }>,
-    mergedOutputPath: string
+    mergedOutputPath: string,
+    credential?: string
   ): Promise<string> {
+    if (this.config.auth) authenticate(credential, this.config.auth);
     const paths = await Promise.all(
-      segments.map((s) => this.generate(s.text, s.voice, s.provider))
+      segments.map((s) => this.generate(s.text, s.voice, s.provider, credential))
     );
     return mergeAudioFiles(paths, mergedOutputPath);
   }
