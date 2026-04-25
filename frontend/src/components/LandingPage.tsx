@@ -1,5 +1,6 @@
 import React from 'react';
 import { useI18n } from '../lib/hooks/useI18n';
+import { useDarkMode } from '../lib/hooks/useDarkMode';
 
 interface LandingPageProps {
   className?: string;
@@ -7,6 +8,7 @@ interface LandingPageProps {
 
 export const LandingPage: React.FC<LandingPageProps> = ({ className }) => {
   const { t, locale, setLocale, availableLocales } = useI18n();
+  const { isDarkMode, toggleDarkMode } = useDarkMode();
   const [email, setEmail] = React.useState('');
   const [emailError, setEmailError] = React.useState('');
   const [isSubmitted, setIsSubmitted] = React.useState(false);
@@ -61,23 +63,36 @@ export const LandingPage: React.FC<LandingPageProps> = ({ className }) => {
               <li><a href="#contact">{t('nav.contact')}</a></li>
             </ul>
             
-            {/* Language Selector */}
-            <div className="language-selector">
-              <label htmlFor="locale-select" className="visually-hidden">
-                Select language
-              </label>
-              <select
-                id="locale-select"
-                value={locale}
-                onChange={(e) => setLocale(e.target.value as any)}
-                aria-label="Language selection"
+            {/* Controls */}
+            <div className="header-controls">
+              {/* Dark Mode Toggle */}
+              <button
+                onClick={toggleDarkMode}
+                aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+                className="dark-mode-toggle"
+                title={isDarkMode ? 'Light mode' : 'Dark mode'}
               >
-                {availableLocales.map((loc) => (
-                  <option key={loc} value={loc}>
-                    {loc.toUpperCase()}
-                  </option>
-                ))}
-              </select>
+                {isDarkMode ? '☀️' : '🌙'}
+              </button>
+
+              {/* Language Selector */}
+              <div className="language-selector">
+                <label htmlFor="locale-select" className="visually-hidden">
+                  Select language
+                </label>
+                <select
+                  id="locale-select"
+                  value={locale}
+                  onChange={(e) => setLocale(e.target.value as any)}
+                  aria-label="Language selection"
+                >
+                  {availableLocales.map((loc) => (
+                    <option key={loc} value={loc}>
+                      {loc.toUpperCase()}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
         </nav>
