@@ -31,3 +31,6 @@ contracts/**/*.d
 # Cargo lock (regenerated per environment)
 Cargo.lock
 
+
+# Performance baselines (stored per branch)
+.performance-baselines/
